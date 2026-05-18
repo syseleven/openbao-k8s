@@ -7,6 +7,7 @@ import (
 	"github.com/evanphx/json-patch"
 	"github.com/openbao/openbao-k8s/agent-inject/internal"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 )
 
 // TODO this can be broken down into a common code and type switched.
@@ -14,8 +15,20 @@ import (
 func addVolumes(target, volumes []corev1.Volume, base string) jsonpatch.Patch {
 	var result jsonpatch.Patch
 	first := len(target) == 0
+
+	existingVolumes := make(map[string]corev1.Volume)
+	for _, v := range target {
+		existingVolumes[v.Name] = v
+	}
+
 	var value interface{}
 	for _, v := range volumes {
+		if existing, ok := existingVolumes[v.Name]; ok {
+			if equality.Semantic.DeepEqual(existing, v) {
+				continue
+			}
+		}
+
 		value = v
 		path := base
 		if first {
@@ -26,6 +39,7 @@ func addVolumes(target, volumes []corev1.Volume, base string) jsonpatch.Patch {
 		}
 
 		result = append(result, internal.AddOp(path, value))
+		existingVolumes[v.Name] = v
 	}
 	return result
 }
